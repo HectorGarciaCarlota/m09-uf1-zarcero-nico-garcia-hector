@@ -45,17 +45,19 @@ namespace AccessControl
                 byte[] salt = new byte[32]; // 32 bytes = 256 bits, a good size for a salt
                 rngCsp.GetBytes(salt);
 
-               
+
 
                 // Store the salt
-                this.Salt = Encoding.UTF8.GetString(salt);
+                this.Salt = BytesToStringHex(salt);
             }
 
 
             using (SHA256 sHA256 = SHA256.Create())
             {
-                byte[] hashValue = sHA256.ComputeHash(Encoding.UTF8.GetBytes(this.Password_PlainText+this.Salt));
-                this.Password_SaltedHash = BytesToStringHex(hashValue);
+                byte[] saltBytes = StringToByteArray(this.Salt);
+                byte[] saltedPasswordHashValue = sHA256.ComputeHash(Encoding.UTF8.GetBytes(this.Password_PlainText + Encoding.UTF8.GetString(saltBytes)));
+                this.Password_SaltedHash = BytesToStringHex(saltedPasswordHashValue);
+
             }
             //Apliquem hash+salt
             //this.Salt=
@@ -63,11 +65,12 @@ namespace AccessControl
 
             //Apliquem hash+salt amb algorisme de hash lent.
             //this.Password_SaltedHashSlow=
-            using (Rfc2898DeriveBytes pbkdf2 = new Rfc2898DeriveBytes(this.Password_Hash, Encoding.UTF8.GetBytes(this.Salt), 10000))
+            using (Rfc2898DeriveBytes pbkdf2 = new Rfc2898DeriveBytes(this.Password_PlainText, StringToByteArray(this.Salt), 10000))
             {
-                byte[] slowHashValue = pbkdf2.GetBytes(32); // 32 bytes = 256 bits, the same size as SHA256
-                this.Password_SaltedHashSlow = this.BytesToStringHex(slowHashValue);
+                byte[] slowHashValue = pbkdf2.GetBytes(32);
+                this.Password_SaltedHashSlow = BytesToStringHex(slowHashValue);
             }
+
 
             ((App)Application.Current).Database.Add(this);            
         }
@@ -82,6 +85,7 @@ namespace AccessControl
             // If the user is found
             if (!ReferenceEquals(MyUser, null))
             {
+                byte[] saltBytes = StringToByteArray(MyUser.Salt);
                 //// Validate with plain text
                 //if (MyUser.Password_PlainText.Equals(_Password))
                 //{
@@ -89,25 +93,25 @@ namespace AccessControl
                 //}
 
                 // Validate with hash (comment out the previous validation)
-                
+
                 //if (MyUser.Password_Hash.Equals(ComputeHash(_Password)))
                 //{
                 //    return true; // Password is valid
                 //}
-                
+
 
                 // Validate with hash and salt (comment out the previous validation)
-                
+
                 //if (MyUser.Password_SaltedHash.Equals(ComputeHashWithSalt(_Password, MyUser.Salt)))
                 //{
                 //    return true; // Password is valid
                 //}
-                
+
 
                 // Validate with slow hash and salt
-                using (Rfc2898DeriveBytes pbkdf2 = new Rfc2898DeriveBytes(_Password, Encoding.UTF8.GetBytes(MyUser.Salt), 10000))
+                using (Rfc2898DeriveBytes pbkdf2 = new Rfc2898DeriveBytes(_Password, saltBytes, 10000))
                 {
-                    byte[] slowHashValue = pbkdf2.GetBytes(32); // 32 bytes = 256 bits, the same size as SHA256
+                    byte[] slowHashValue = pbkdf2.GetBytes(32); 
                     string slowHash = BytesToStringHex(slowHashValue);
 
                     // Compare the slow hash with the stored slow hash
@@ -149,6 +153,14 @@ namespace AccessControl
                 stringBuilder.AppendFormat("{0:x2}", b);
 
             return stringBuilder.ToString();
+        }
+        byte[] StringToByteArray(string hex)
+        {
+            int NumberChars = hex.Length;
+            byte[] bytes = new byte[NumberChars / 2];
+            for (int i = 0; i < NumberChars; i += 2)
+                bytes[i / 2] = Convert.ToByte(hex.Substring(i, 2), 16);
+            return bytes;
         }
     }
 
